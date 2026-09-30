@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GuitarHUD</title>
+<style>
+  :root {
+    color-scheme: dark light;
+    --bg: #16161a;
+    --bg-bar: rgba(28,28,33,0.92);
+    --fg: #e8e6e3;
+    --dim: #8f8d94;
+    --line: rgba(255,255,255,0.10);
+    --chord: #ffb454;
+    --sec: #6fc3df;
+    --accent: #1ed760;
+    --chip: rgba(255,255,255,0.06);
+    --chip-hover: rgba(255,255,255,0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+    --ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    --sheet: 13px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fbfaf8; --bg-bar: rgba(250,249,247,0.94); --fg: #1d1c1a; --dim: #6b6a70;
+      --line: rgba(0,0,0,0.12); --chord: #b35c00; --sec: #1f6f8b;
+      --chip: rgba(0,0,0,0.05); --chip-hover: rgba(0,0,0,0.10);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.45 var(--ui);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ---- top bar ---- */
+  #bar {
+    position: relative; flex: none;
+    padding: 7px 10px 9px;
+    background: var(--bg-bar);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--line);
+  }
+  #progress { position: absolute; left: 0; bottom: -1px; height: 2px; background: var(--accent); width: 0; transition: width .9s linear; }
+
+  /* Row 1: buttons only, inset past the traffic lights. Row 2: the song, on its
+     own full-width line so the two never compete for horizontal space. */
+  #toolrow { display: flex; align-items: center; min-height: 22px; padding-left: 70px; }
+  #now {
+    display: flex; align-items: baseline; gap: 5px;
+    margin-top: 2px; min-width: 0; overflow: hidden;
+  }
+  #song {
+    flex: 0 1 auto; min-width: 0;
+    font-weight: 600; font-size: 12.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #artist {
+    flex: 0 1 auto; min-width: 0;
+    color: var(--dim); font-size: 11px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .btn {
+    flex: none; border: 0; background: var(--chip); color: var(--fg);
+    border-radius: 6px; padding: 3px 7px; font: 11px/1.3 var(--ui);
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: var(--chip-hover); }
+  .btn.on { background: var(--accent); color: #06250f; font-weight: 600; }
+  .btn.icon { padding: 3px 5px; font-size: 12px; }
+
+  #tools {
+    display: flex; align-items: center; gap: 4px;
+    flex: 0 1 auto; min-width: 0;
+    margin-left: auto;                         /* sit at the right, like the titlebar */
+    overflow-x: auto; overflow-y: hidden;      /* too narrow? scroll the buttons */
+    scrollbar-width: none;
+  }
+  /* Fade only the side that still has buttons hidden past it -- so once you've
+     scrolled to the end, the last icon is fully sharp instead of dimmed. */
+  #tools.more-right {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  }
+  #tools.more-left {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+  }
+  #tools.more-left.more-right {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+  }
+  #tools::-webkit-scrollbar { display: none; }
+  #tools > * { flex: none; }                   /* buttons keep their size and scroll instead */
+  #tools .grp { display: flex; align-items: center; gap: 1px; background: var(--chip); border-radius: 6px; padding: 1px; }
+  #tools .grp .btn { background: transparent; padding: 2px 5px; }
+  #tools .grp .btn:hover { background: var(--chip-hover); }
+  /* This rule out-specifies .btn.on above, which would otherwise strip the
+     highlight background and leave the dark "on" text unreadable. */
+  #tools .grp .btn.on { background: var(--accent); color: #06250f; }
+  #keyinfo { color: var(--dim); font-size: 10.5px; white-space: nowrap; }
+
+  /* ---- version picker ---- */
+  #picker { flex: none; border-bottom: 1px solid var(--line); background: var(--bg-bar); display: none; }
+  #picker.open { display: block; }
+  #pickhead {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; font-size: 10.5px; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  #pickhead .spacer { flex: 1; }
+  #picklist { max-height: 168px; overflow-y: auto; padding: 0 6px 6px; }
+  .vrow {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 6px; cursor: pointer;
+  }
+  .vrow:hover { background: var(--chip-hover); }
+  .vrow.active { background: var(--chip); }
+  .vrow .tick { width: 12px; flex: none; color: var(--accent); font-size: 11px; }
+  .vrow .vmain { flex: 1; min-width: 0; }
+  /* display:block matters -- an inline span ignores overflow, so a long title
+     would run past its box instead of truncating. */
+  .vrow .vname {
+    display: block; font-size: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* The type sits on the second line, leaving the whole width to the title. */
+  .vrow .vsub {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10.5px; color: var(--dim);
+    white-space: nowrap; overflow: hidden;
+  }
+  .vrow .vtype {
+    flex: none; font-size: 9.5px; line-height: 14px; padding: 0 5px;
+    border-radius: 3px; background: var(--chip); color: var(--dim);
+  }
+  .vrow.active .vtype { color: var(--chord); }
+
+  /* ---- search ---- */
+  #searchwrap { display: none; padding: 5px 0 0; }
+  #searchwrap.open { display: block; }
+  #search {
+    width: 100%; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--chip); color: var(--fg);
+    font: 12px var(--ui); -webkit-user-select: text; user-select: text;
+  }
+  #search:focus { outline: none; border-color: var(--accent); }
+
+  /* ---- sheet ---- */
+  #scroll { flex: 1; overflow-y: auto; overflow-x: auto; padding: 10px 12px 60vh; }
+  #sheet {
+    font-family: var(--mono); font-size: var(--sheet); line-height: 1.5;
+    white-space: pre; tab-size: 4;
+    -webkit-user-select: text; user-select: text;
+  }
+  #sheet .ch { color: var(--chord); font-weight: 700; }
+  #sheet .sec { color: var(--sec); font-weight: 700; }
+  #meta { color: var(--dim); font-size: 11px; font-family: var(--ui); margin-bottom: 10px; }
+  #meta b { color: var(--fg); font-weight: 600; }
+
+  /* ---- states ---- */
+  #state { padding: 26px 20px; text-align: center; color: var(--dim); display: none; }
+  #state.show { display: block; }
+  #state h2 { font-size: 14px; color: var(--fg); margin: 0 0 6px; }
+  #state p { margin: 0 0 12px; font-size: 12px; }
+  .spin {
+    width: 15px; height: 15px; margin: 0 auto 10px;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: sp .7s linear infinite;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  /* ---- chord diagram popup ---- */
+  #chordpop {
+    position: fixed; z-index: 50; display: none;
+    background: var(--bg-bar); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 9px 8px;
+    box-shadow: 0 8px 26px rgba(0,0,0,.45);
+    backdrop-filter: saturate(180%) blur(20px);
+    font-family: var(--ui);
+  }
+  #chordpop.show { display: block; }
+  #chordpop .cname {
+    font-size: 12px; font-weight: 700; color: var(--chord);
+    text-align: center; margin-bottom: 3px; font-family: var(--mono);
+  }
+  #chordpop .cnav {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    margin-top: 4px; font-size: 10px; color: var(--dim);
+  }
+  #chordpop .cnav button {
+    border: 0; background: var(--chip); color: var(--fg);
+    border-radius: 4px; padding: 1px 6px; cursor: pointer; font-size: 10px;
+  }
+  #chordpop .cnav button:hover { background: var(--chip-hover); }
+  #chordpop .hint { font-size: 9.5px; color: var(--dim); text-align: center; margin-top: 3px; }
+  #sheet .ch { cursor: help; }
+  #sheet .ch.lit { background: var(--chip); border-radius: 3px; }
+  #scroll::-webkit-scrollbar, #picklist::-webkit-scrollbar { width: 9px; }
+  #scroll::-webkit-scrollbar-thumb, #picklist::-webkit-scrollbar-thumb {
+    background: rgba(140,140,150,.35); border-radius: 5px; border: 2px solid transparent; background-clip: content-box;
+  }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div id="toolrow">
+    <div id="tools">
+      <span id="keyinfo"></span>
+      <div class="grp" title="Transpose">
+        <button class="btn" id="tdown">♭</button>
+        <button class="btn" id="treset" style="min-width:26px">0</button>
+        <button class="btn" id="tup">♯</button>
+      </div>
+      <div class="grp" title="Text size">
+        <button class="btn" id="fdown">A−</button>
+        <button class="btn" id="fup">A+</button>
+      </div>
+      <button class="btn icon" id="wrapbtn" title="Wrap long lines instead of shrinking them">↵</button>
+      <button class="btn icon" id="scrollbtn" title="Scroll in time with the song — scroll to shift it, toggle to re-sync">⇕</button>
+      <button class="btn icon on" id="pinbtn" title="Float above other windows">📌</button>
+      <button class="btn icon" id="searchbtn" title="Search manually">🔍</button>
+      <button class="btn icon" id="verbtn" title="Other versions">≡</button>
+    </div>
+  </div>
+  <div id="now">
+    <span id="song">GuitarHUD</span><span id="artist">waiting for Spotify…</span>
+  </div>
+  <div id="searchwrap"><input id="search" placeholder="Search Ultimate Guitar — song and artist, then ↵" spellcheck="false"></div>
+  <div id="progress"></div>
+</div>
+
+<div id="picker">
+  <div id="pickhead">
+    <span id="pickcount">versions</span>
+    <span class="spacer"></span>
+    <button class="btn" id="pickclose">hide</button>
+  </div>
+  <div id="picklist"></div>
+</div>
+
+<div id="chordpop"></div>
+
+<div id="state"></div>
+
+<div id="scroll">
+  <div id="meta"></div>
+  <div id="sheet"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const send = (msg) => {
+    try { window.webkit.messageHandlers.bridge.postMessage(msg); } catch (e) {}
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    song: $("song"), artist: $("artist"), keyinfo: $("keyinfo"),
+    sheet: $("sheet"), meta: $("meta"), scroll: $("scroll"), state: $("state"),
+    picker: $("picker"), picklist: $("picklist"), pickcount: $("pickcount"),
+    progress: $("progress"), search: $("search"), searchwrap: $("searchwrap"),
+    pinbtn: $("pinbtn"), scrollbtn: $("scrollbtn"), treset: $("treset"),
+    wrapbtn: $("wrapbtn"), tools: $("tools"),
+    toolrow: $("toolrow"), now: $("now"), bar: $("bar"),
+  };
+
+  // ---------- state ----------
+  let S = {
+    status: "idle", message: "", track: {}, versions: [], tab: null,
+    semitones: 0, fontSize: 13, sync: false, pinned: true, wrap: false,
+    trackId: null,
+    pos: 0, dur: 0, playing: false, posAt: 0,
+    scrollOffset: 0,   // how far you've nudged the sheet from the computed spot
+    lastSet: null,     // the scrollTop we last wrote, to spot user scrolling
+  };
+
+  const LS = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  S.fontSize = LS.get("fontSize", 13);
+  S.sync = LS.get("sync", false);
+  S.wrap = LS.get("wrap", false);
+
+  // ---------- chord transposition ----------
+  const SHARPS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const FLATS  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
+  const VAL = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+
+  function shiftRoot(root, semis, useFlats) {
+    const m = /^([A-G])([#b]?)$/.exec(root);
+    if (!m) return null;
+    let v = VAL[m[1]];
+    if (m[2] === "#") v += 1;
+    if (m[2] === "b") v -= 1;
+    v = (((v + semis) % 12) + 12) % 12;
+    return (useFlats ? FLATS : SHARPS)[v];
+  }
+
+  /** Transpose one chord symbol, e.g. "F#m7/A#" -> "Gm7/B". */
+  function shiftChord(sym, semis, useFlats) {
+    const m = /^([A-G][#b]?)(.*)$/.exec(sym.trim());
+    if (!m) return null;
+    const root = shiftRoot(m[1], semis, useFlats);
+    if (!root) return null;
+    let rest = m[2];
+    // Slash bass note moves with the chord.
+    const slash = /^(.*?)\/([A-G][#b]?)(.*)$/.exec(rest);
+    if (slash) {
+      const bass = shiftRoot(slash[2], semis, useFlats);
+      if (bass) rest = slash[1] + "/" + bass + slash[3];
+    }
+    return root + rest;
+  }
+
+  /**
+   * Rewrite every [ch]...[/ch] token, compensating with the whitespace that
+   * follows so chords stay lined up over their lyrics in the monospace grid.
+   */
+  let chordOrigin = {};   // transposed name -> the name UG shipped shapes for
+
+  function transposeContent(raw, semis) {
+    if (!semis) return raw;
+    const flatCount = (raw.match(/\[ch\][A-G]b/g) || []).length;
+    const sharpCount = (raw.match(/\[ch\][A-G]#/g) || []).length;
+    const useFlats = flatCount > sharpCount;
+
+    let out = "";
+    let i = 0;
+    const OPEN = "[ch]", CLOSE = "[/ch]";
+    while (i < raw.length) {
+      const start = raw.indexOf(OPEN, i);
+      if (start === -1) { out += raw.slice(i); break; }
+      const bodyStart = start + OPEN.length;
+      const end = raw.indexOf(CLOSE, bodyStart);
+      if (end === -1) { out += raw.slice(i); break; }
+
+      out += raw.slice(i, start);
+      const body = raw.slice(bodyStart, end);
+      const moved = shiftChord(body, semis, useFlats);
+      let after = end + CLOSE.length;
+
+      if (moved === null) {
+        out += OPEN + body + CLOSE;
+      } else {
+        out += OPEN + moved + CLOSE;
+        chordOrigin[moved] = body;
+        let delta = moved.length - body.length;
+        if (delta > 0) {
+          // Chord got wider: eat following spaces so the grid doesn't drift.
+          let eaten = 0;
+          while (eaten < delta && raw[after] === " " && raw[after + 1] !== "\n") { after++; eaten++; }
+        } else if (delta < 0) {
+          // Chord got narrower: pad, but never past the end of the line.
+          if (raw[after] === " " || raw[after] === undefined || raw[after] === "\n") {
+            if (raw[after] === " ") out += " ".repeat(-delta);
+          }
+        }
+      }
+      i = after;
+    }
+    return out;
+  }
+
+
+  // ---------- text size ----------
+  // A-/A+ sets the size outright. With wrap off, long lines simply run off the
+  // right edge and the sheet scrolls sideways; with wrap on, the size decides
+  // how many columns fit, so changing it reflows the sheet.
+  let charRatio = 0;
+  function charWidthRatio() {
+    if (charRatio) return charRatio;
+    const probe = document.createElement("span");
+    probe.style.cssText =
+      "position:absolute;visibility:hidden;white-space:pre;font-size:100px;" +
+      "font-family:ui-monospace,'SF Mono',Menlo,Monaco,monospace";
+    probe.textContent = "0".repeat(50);
+    document.body.appendChild(probe);
+    charRatio = probe.getBoundingClientRect().width / 50 / 100;   // px per char per px of font
+    probe.remove();
+    return charRatio || 0.6;
+  }
+
+  function applyFontSize() {
+    document.documentElement.style.setProperty("--sheet", S.fontSize + "px");
+  }
+
+
+  // ---------- wrapping ----------
+  // Chord sheets can't be wrapped naively: a chord line and its lyric line would
+  // break at different columns and the chords would land over the wrong words.
+  // So lines are grouped (chords + their lyrics, or a run of tab strings) and
+  // every line in a group is broken at the SAME column.
+
+  /** Pull [ch] markup out, keeping chord positions as column ranges. */
+  function parseLine(raw) {
+    let plain = "", spans = [], i = 0;
+    while (i < raw.length) {
+      if (raw.startsWith("[ch]", i)) {
+        const e = raw.indexOf("[/ch]", i);
+        if (e === -1) { plain += raw[i++]; continue; }
+        const body = raw.slice(i + 4, e);
+        spans.push([plain.length, plain.length + body.length]);
+        plain += body;
+        i = e + 5;
+      } else {
+        plain += raw[i++];
+      }
+    }
+    return { plain, spans };
+  }
+
+  const isChordLine = (p) =>
+    p.spans.length > 0 &&
+    p.spans.reduce((n, sp) => n + (sp[1] - sp[0]), 0) === p.plain.replace(/\s/g, "").length;
+
+  const isTabLine = (t) =>
+    /^\s*[a-gA-G][b#]?\s*\|/.test(t) ||   // "e|", "eb|", "Bb|", "G#|", "E |"
+    /^\s*\|/.test(t) ||
+    (t.match(/-/g) || []).length > 6;
+
+  /** Column ranges to cut a group at, preferring a column that's blank in every line. */
+  function breakPoints(lines, cols, cutsChord) {
+    const maxLen = Math.max.apply(null, lines.map((l) => l.length).concat([0]));
+    const segs = [];
+    let off = 0;
+    while (off < maxLen) {
+      let end = Math.min(off + cols, maxLen);
+      if (end < maxLen) {
+        const floor = off + Math.max(8, Math.floor(cols * 0.4));
+        let chosen = -1;
+        for (let c = end; c > floor; c--) {
+          // Best case: every line is blank or already finished here.
+          if (lines.every((l) => c >= l.length || l[c] === " ")) { chosen = c; break; }
+        }
+        // Tab strings are solid dashes, so no column is ever blank. Settle for
+        // one that at least doesn't cut a chord name on the line above in half.
+        if (chosen < 0 && cutsChord) {
+          for (let c = end; c > floor; c--) {
+            if (!cutsChord(c)) { chosen = c; break; }
+          }
+        }
+        if (chosen > 0) end = chosen;
+      }
+      segs.push([off, end]);
+      off = end;
+    }
+    return segs.length ? segs : [[0, 0]];
+  }
+
+  function segHTML(p, a, b) {
+    const plain = p.plain.slice(a, b).replace(/\s+$/, "");
+    if (!plain) return "";
+    const sec = /^\[([^\]]{1,40})\]$/.exec(plain.trim());
+    if (sec && !p.spans.length) return '<span class="sec">' + esc(plain) + "</span>";
+
+    let out = "", cur = 0;
+    for (const sp of p.spans) {
+      const s = Math.max(sp[0], a) - a, e = Math.min(sp[1], b) - a;
+      if (e <= s || s >= plain.length) continue;
+      if (s > cur) out += esc(plain.slice(cur, s));
+      out += '<span class="ch">' + esc(plain.slice(s, Math.min(e, plain.length))) + "</span>";
+      cur = Math.min(e, plain.length);
+    }
+    return out + esc(plain.slice(cur));
+  }
+
+  function buildWrapped(raw) {
+    const cols = Math.max(
+      20,
+      Math.floor((el.scroll.clientWidth - 26) / (S.fontSize * charWidthRatio()))
+    );
+    const parsed = raw.replace(/\[\/?tab\]\n?/g, "").split("\n").map(parseLine);
+
+    // Group lines that must break together.
+    const groups = [];
+    let i = 0;
+    while (i < parsed.length) {
+      // A chord line directly above a tab run heads that run -- it must break
+      // with all six strings, not get paired off with just the first one.
+      const headsTab = isChordLine(parsed[i]) && i + 1 < parsed.length &&
+                       isTabLine(parsed[i + 1].plain);
+      const start = headsTab ? i + 1 : i;
+
+      if (isTabLine(parsed[start].plain)) {
+        let j = start;
+        while (j < parsed.length && isTabLine(parsed[j].plain)) j++;
+        groups.push(parsed.slice(i, j));           // includes the chord head
+        i = j;
+      } else if (isChordLine(parsed[i]) && i + 1 < parsed.length &&
+                 parsed[i + 1].plain.trim() && !isChordLine(parsed[i + 1])) {
+        groups.push([parsed[i], parsed[i + 1]]);   // chords over their lyrics
+        i += 2;
+      } else {
+        groups.push([parsed[i]]);
+        i++;
+      }
+    }
+
+    const out = [];
+    for (const g of groups) {
+      const lines = g.map((p) => p.plain);
+      if (Math.max.apply(null, lines.map((l) => l.length).concat([0])) <= cols) {
+        for (const p of g) out.push(segHTML(p, 0, p.plain.length));   // already fits
+        continue;
+      }
+
+      // In a tab block, carry the string label ("eb|") onto every chunk --
+      // otherwise the continuation is an unlabelled run of dashes. Only when
+      // every label is the same width, since trimming a different number of
+      // characters per line would shear the block out of alignment.
+      let labels = null, L = 0;
+      if (g.some((p) => isTabLine(p.plain))) {
+        const widths = g.map((p) => {
+          const k = p.plain.indexOf("|");
+          return k >= 0 && k <= 3 ? k + 1 : 0;
+        });
+        const real = widths.filter((w) => w > 0);
+        if (real.length && real.every((w) => w === real[0])) {
+          L = real[0];
+          // A chord head has no label of its own, so it gets blanks to match.
+          labels = g.map((p, idx) => (widths[idx] > 0 ? p.plain.slice(0, L) : " ".repeat(L)));
+        }
+      }
+
+      // Column c of the wrapped body is column c+L of the original line.
+      const cutsChord = (c) =>
+        g.some((p) => p.spans.some((sp) => c + L > sp[0] && c + L < sp[1]));
+
+      const body = L ? lines.map((l) => l.slice(L)) : lines;
+      for (const seg of breakPoints(body, Math.max(12, cols - L), cutsChord)) {
+        for (let idx = 0; idx < g.length; idx++) {
+          const p = g[idx];
+          const a = seg[0] + L, b = seg[1] + L;
+          if (!labels && a >= p.plain.length) { out.push(""); continue; }
+          out.push((labels ? esc(labels[idx]) : "") + segHTML(p, a, b));
+        }
+      }
+    }
+    return out.join("\n");
+  }
+
+  // ---------- rendering ----------
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function renderSheet() {
+    const tab = S.tab;
+    if (!tab) { el.sheet.innerHTML = ""; el.meta.innerHTML = ""; return; }
+
+    chordOrigin = {};
+    const raw = transposeContent(tab.content || "", S.semitones);
+
+    applyFontSize();   // settle the size first -- wrapping measures columns from it
+
+    if (S.wrap) {
+      el.sheet.innerHTML = buildWrapped(raw);
+    } else {
+      el.sheet.innerHTML = esc(raw)
+        .replace(/\[ch\]([\s\S]*?)\[\/ch\]/g, '<span class="ch">$1</span>')
+        .replace(/\[\/?tab\]\n?/g, "")
+        // Section labels on their own line: [Verse 1], [Chorus], [Intro]...
+        .replace(/^\[([^\]\n]{1,40})\]$/gm, '<span class="sec">[$1]</span>');
+    }
+
+    const bits = [];
+    if (tab.type) bits.push(esc(tab.type));
+    if (tab.votes) bits.push("★ " + Number(tab.rating).toFixed(2) + " · " + tab.votes + " votes");
+    if (tab.key) bits.push("key <b>" + esc(tab.key) + "</b>");
+    if (tab.capo) bits.push("capo <b>fret " + tab.capo + "</b>");
+    if (tab.tuning) bits.push("tuning <b>" + esc(tab.tuning) + "</b>");
+    if (tab.difficulty) bits.push(esc(tab.difficulty));
+    el.meta.innerHTML = bits.join("  ·  ") +
+      (tab.url ? '  ·  <a href="#" id="openweb" style="color:var(--dim)">open on UG ↗</a>' : "");
+
+    const link = $("openweb");
+    if (link) link.onclick = (e) => { e.preventDefault(); send({ action: "openWeb", url: tab.url }); };
+
+    const t = S.semitones;
+    el.treset.textContent = t === 0 ? "0" : (t > 0 ? "+" + t : String(t));
+    el.treset.classList.toggle("on", t !== 0);
+
+    el.keyinfo.textContent = tab.capo ? "capo " + tab.capo : "";
+  }
+
+  function renderVersions() {
+    const vs = S.versions || [];
+    el.pickcount.textContent = vs.length ? vs.length + " versions found — pick one" : "no versions";
+    el.picklist.innerHTML = "";
+
+    vs.forEach((v) => {
+      const active = S.tab && S.tab.url === v.url;
+      const row = document.createElement("div");
+      row.className = "vrow" + (active ? " active" : "");
+
+      const stars = v.votes
+        ? "★ " + Number(v.rating).toFixed(2) + " · " + v.votes + " votes"
+        : "no ratings yet";
+      row.innerHTML =
+        '<span class="tick">' + (active ? "●" : "") + "</span>" +
+        '<span class="vmain"><span class="vname"></span><div class="vsub">' +
+        '<span class="vtype">' + esc(v.type || "?") + "</span>" +
+        "<span>" + stars + "</span></div></span>";
+      row.querySelector(".vname").textContent =
+        v.songName + (v.artistName ? " — " + v.artistName : "") + (v.version > 1 ? "  (v" + v.version + ")" : "");
+
+      row.onclick = () => {
+        send({ action: "pickVersion", url: v.url });
+        closePicker();
+      };
+      el.picklist.appendChild(row);
+    });
+  }
+
+  function openPicker() { el.picker.classList.add("open"); }
+  function closePicker() { el.picker.classList.remove("open"); }
+
+  function renderState() {
+    const st = S.status;
+    const show = (html) => { el.state.className = "show"; el.state.innerHTML = html; el.scroll.style.display = "none"; };
+    const hide = () => { el.state.className = ""; el.scroll.style.display = ""; };
+
+    if (st === "ok" && S.tab) { hide(); return; }
+
+    if (st === "loading") {
+      show('<div class="spin"></div><p>Finding chords…</p>');
+    } else if (st === "notRunning") {
+      show("<h2>Spotify isn’t running</h2><p>Start Spotify and play something — this window follows along on its own.</p>");
+    } else if (st === "notAuthorized") {
+      show("<h2>One-time permission needed</h2><p>macOS needs your OK for GuitarHUD to read what Spotify is playing.</p>" +
+           '<button class="btn" id="fixperm">Open Privacy Settings</button>' +
+           '<p style="margin-top:10px">Enable <b>Spotify</b> under GuitarHUD, then reopen the app.</p>');
+      const b = $("fixperm");
+      if (b) b.onclick = () => send({ action: "openAutomationSettings" });
+    } else if (st === "noResults") {
+      show("<h2>No chords for this one</h2><p>" + esc((S.track && S.track.name) || "") +
+           "</p><button class='btn' id='trysearch'>Search manually</button>" +
+           " <button class='btn' id='retry2'>Look again</button>" +
+           "<p style='margin-top:10px'>Not retrying on its own — it would just ask " +
+           "Ultimate Guitar the same question every second.</p>");
+      const b = $("trysearch");
+      if (b) b.onclick = () => { el.searchwrap.classList.add("open"); el.search.focus(); };
+      const r = $("retry2");
+      if (r) r.onclick = () => send({ action: "refresh" });
+    } else if (st === "error") {
+      show("<h2>Couldn’t load chords</h2><p>" + esc(S.message || "Something went wrong.") + "</p>" +
+           "<button class='btn' id='retry'>Try again</button>");
+      const b = $("retry");
+      if (b) b.onclick = () => send({ action: "refresh" });
+    } else {
+      show("<h2>Nothing playing</h2><p>Press play in Spotify.</p>");
+    }
+  }
+
+  function renderNow() {
+    const t = S.track || {};
+    el.song.textContent = t.name || "GuitarHUD";
+    el.artist.textContent = t.artist ? "— " + t.artist
+                                     : (t.name ? "" : "waiting for Spotify…");
+    document.title = t.name ? t.name + " — " + t.artist : "GuitarHUD";
+  }
+
+  // ---------- bridge in ----------
+  window.GH = {
+    update(next) {
+      const newTrack = next.track && next.track.id !== S.trackId;
+      const prevTabURL = S.tab && S.tab.url;
+
+      S.status = next.status;
+      S.message = next.message || "";
+      S.track = next.track || {};
+      S.versions = next.versions || [];
+      S.tab = next.tab && next.tab.content ? next.tab : null;
+      S.pinned = !!next.pinned;
+      S.pos = S.track.position || 0;
+      S.dur = S.track.duration || 0;
+      S.playing = !!S.track.playing;
+      S.posAt = performance.now();
+
+      if (newTrack) {
+        S.trackId = S.track.id;
+        S.semitones = 0;          // a new song starts in its own key
+        el.scroll.scrollTop = 0;
+      }
+      if (newTrack || (S.tab && S.tab.url) !== prevTabURL) resyncScroll();
+
+      el.pinbtn.classList.toggle("on", S.pinned);
+      el.scrollbtn.classList.toggle("on", S.sync);
+      el.wrapbtn.classList.toggle("on", S.wrap);
+
+      renderNow();
+      reportDragRects();
+      renderVersions();
+      renderSheet();
+      renderState();
+
+      // The whole point: on a new song the choices come to you.
+      if (next.newSong && S.versions.length > 1) openPicker();
+      if (S.versions.length === 0) closePicker();
+    },
+
+    tick(p) {
+      S.pos = p.position || 0;
+      S.dur = p.duration || 0;
+      S.playing = !!p.playing;
+      S.posAt = performance.now();
+    },
+  };
+
+  // ---------- controls ----------
+  /** Drop any manual offset and snap back to the computed position. */
+  function resyncScroll() {
+    S.scrollOffset = 0;
+    S.lastSet = null;
+  }
+
+  const bumpTranspose = (d) => { S.semitones = Math.max(-11, Math.min(11, S.semitones + d)); renderSheet(); };
+  $("tup").onclick = () => bumpTranspose(1);
+  $("tdown").onclick = () => bumpTranspose(-1);
+  $("treset").onclick = () => { S.semitones = 0; renderSheet(); };
+
+  const bumpFont = (d) => {
+    S.fontSize = Math.max(8, Math.min(32, S.fontSize + d));
+    LS.set("fontSize", S.fontSize);
+    applyFontSize();
+    resyncScroll();                       // the sheet's height just changed
+    if (S.wrap && S.tab) renderSheet();   // fewer/more columns now fit -- rewrap
+  };
+  $("fup").onclick = () => bumpFont(1);
+  $("fdown").onclick = () => bumpFont(-1);
+
+  el.pinbtn.onclick = () => {
+    S.pinned = !S.pinned;
+    el.pinbtn.classList.toggle("on", S.pinned);
+    send({ action: "setPin", on: S.pinned });
+  };
+
+  el.wrapbtn.onclick = () => {
+    S.wrap = !S.wrap;
+    LS.set("wrap", S.wrap);
+    el.wrapbtn.classList.toggle("on", S.wrap);
+    resyncScroll();          // the sheet's height just changed
+    renderSheet();          // applyFontSize() runs inside, before wrapping measures
+  };
+
+  el.scrollbtn.onclick = () => {
+    S.sync = !S.sync;
+    resyncScroll();          // toggling is how you re-sync after nudging it
+    LS.set("sync", S.sync);
+    el.scrollbtn.classList.toggle("on", S.sync);
+  };
+
+  $("verbtn").onclick = () => el.picker.classList.toggle("open");
+  $("pickclose").onclick = closePicker;
+
+  $("searchbtn").onclick = () => {
+    el.searchwrap.classList.toggle("open");
+    if (el.searchwrap.classList.contains("open")) { el.search.focus(); el.search.select(); }
+  };
+  el.search.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      send({ action: "search", query: el.search.value });
+      el.searchwrap.classList.remove("open");
+    } else if (e.key === "Escape") {
+      el.searchwrap.classList.remove("open");
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target === el.search) return;
+    if ((e.metaKey || e.ctrlKey) && e.key === "f") { e.preventDefault(); $("searchbtn").click(); }
+    else if (e.key === "+" || e.key === "=") bumpTranspose(1);
+    else if (e.key === "-" || e.key === "_") bumpTranspose(-1);
+    else if (e.key === "v") $("verbtn").click();
+    else if (e.key === "s") el.scrollbtn.click();
+    else if (e.key === "w") el.wrapbtn.click();
+  });
+
+  // ---------- playback-synced scrolling ----------
+  function frame() {
+    if (S.dur > 0) {
+      const elapsed = S.playing ? (performance.now() - S.posAt) / 1000 : 0;
+      const pos = Math.min(S.pos + elapsed, S.dur);
+      el.progress.style.width = ((pos / S.dur) * 100).toFixed(2) + "%";
+
+      if (S.sync && S.playing && S.tab) {
+        // Hold the spot you're playing at a fixed height on screen. Mapping the
+        // song fraction straight onto scrollTop instead lets it sink toward the
+        // bottom as the song runs on.
+        const view = el.scroll.clientHeight;
+        const anchor = view * 0.38;
+        const tail = window.innerHeight * 0.6;          // matches the sheet's bottom padding
+        const content = Math.max(1, el.scroll.scrollHeight - tail);
+        const maxScroll = Math.max(0, el.scroll.scrollHeight - view);
+        const cur = el.scroll.scrollTop;
+
+        // If the scrollbar isn't where we left it, you moved it -- by wheel,
+        // trackpad, scrollbar or keyboard, it doesn't matter which. Fold that
+        // into a standing offset so the sheet carries on from where you put it
+        // at the same rate, instead of snapping back. The ⇕ button clears it.
+        if (S.lastSet !== null && Math.abs(cur - S.lastSet) > 1.5) {
+          S.scrollOffset += cur - S.lastSet;
+        }
+
+        // Re-measured every frame, so a resize or font change retargets on its own.
+        const base = (pos / S.dur) * content - anchor;
+        const target = Math.max(0, Math.min(base + S.scrollOffset, maxScroll));
+        if (Math.abs(target - cur) > 0.5) el.scroll.scrollTop = cur + (target - cur) * 0.06;
+        S.lastSet = el.scroll.scrollTop;   // read back -- the browser may clamp or round
+      } else {
+        S.lastSet = null;                  // a pause isn't a user scroll
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+
+  // ---------- chord diagrams ----------
+  // UG ships real fingerings per chord: frets/fingers high-E-first, -1 muted,
+  // 0 open, plus barre spans in listCapos.
+
+  /** Shift a voicing by n semitones. Open strings become fretted, which is
+   *  exactly how an open shape turns into the right barre chord. */
+  function normalizeShape(sh, semis) {
+    let frets = (sh.frets || []).slice();
+    let fingers = (sh.fingers || []).slice();
+    let barres = [];
+
+    if (semis) {
+      // Track mutes up front: an open string shifted down would otherwise
+      // collide with the -1 "muted" sentinel.
+      const muted = frets.map((f) => f < 0);
+      frets = frets.map((f, i) => (muted[i] ? -1 : f + semis));
+      if (frets.some((f, i) => !muted[i] && f < 0)) {
+        frets = frets.map((f, i) => (muted[i] ? -1 : f + 12));   // dropped below the nut
+      }
+      fingers = [];   // the original fingering no longer applies
+    } else {
+      barres = (sh.listCapos || []).map((c) => ({
+        fret: c.fret, from: c.startString, to: c.lastString,
+      }));
+    }
+
+    const fretted = frets.filter((f) => f > 0);
+    const maxF = fretted.length ? Math.max.apply(null, fretted) : 0;
+    const minF = fretted.length ? Math.min.apply(null, fretted) : 0;
+    const base = maxF > 5 ? minF : 1;
+
+    // After a shift, rebuild the barre: the lowest fretted note held across strings.
+    if (semis && fretted.length) {
+      const idx = [];
+      frets.forEach((f, i) => { if (f === minF && f > 0) idx.push(i); });
+      if (idx.length >= 2) {
+        barres = [{ fret: minF, from: Math.min.apply(null, idx), to: Math.max.apply(null, idx) }];
+      }
+    }
+    return { frets, fingers, barres, base };
+  }
+
+  /** Draw a voicing. Strings run low-E on the left, as you'd see looking at the neck. */
+  function chordSVG(sh) {
+    const { frets, fingers, barres, base } = sh;
+    const N = 6, ROWS = 5;
+    const x0 = 20, y0 = 26, dx = 13, dy = 15;
+    const W = 104, H = y0 + dy * ROWS + 8;
+    const sx = (i) => x0 + dx * i;              // i: 0 = low E (leftmost)
+    const disp = (i) => 5 - i;                  // display index -> frets[] index
+
+    let p = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">';
+    p += '<g stroke="currentColor" stroke-opacity=".45" stroke-width="1">';
+    for (let i = 0; i < N; i++) p += '<line x1="' + sx(i) + '" y1="' + y0 + '" x2="' + sx(i) + '" y2="' + (y0 + dy * ROWS) + '"/>';
+    for (let r = 0; r <= ROWS; r++) p += '<line x1="' + x0 + '" y1="' + (y0 + dy * r) + '" x2="' + sx(N - 1) + '" y2="' + (y0 + dy * r) + '"/>';
+    p += '</g>';
+
+    if (base === 1) {
+      p += '<rect x="' + (x0 - 1) + '" y="' + (y0 - 3) + '" width="' + (dx * 5 + 2) + '" height="3" fill="currentColor"/>';
+    } else {
+      p += '<text x="4" y="' + (y0 + dy - 4) + '" font-size="9" fill="currentColor" fill-opacity=".65">' + base + 'fr</text>';
+    }
+
+    barres.forEach((b) => {
+      const row = b.fret - base + 1;
+      if (row < 1 || row > ROWS) return;
+      const a = sx(Math.min(disp(b.from), disp(b.to)));
+      const z = sx(Math.max(disp(b.from), disp(b.to)));
+      const y = y0 + dy * (row - 0.5);
+      p += '<rect x="' + (a - 4) + '" y="' + (y - 4.5) + '" width="' + (z - a + 8) + '" height="9" rx="4.5" fill="var(--chord)"/>';
+    });
+
+    for (let i = 0; i < N; i++) {
+      const f = frets[disp(i)];
+      const x = sx(i);
+      if (f === -1) {
+        p += '<text x="' + x + '" y="20" font-size="9" text-anchor="middle" fill="currentColor" fill-opacity=".6">\u00d7</text>';
+        continue;
+      }
+      if (f === 0) {
+        p += '<circle cx="' + x + '" cy="17" r="3.2" fill="none" stroke="currentColor" stroke-opacity=".6"/>';
+        continue;
+      }
+      const row = f - base + 1;
+      if (row < 1 || row > ROWS) continue;
+      const inBarre = barres.some((b) => b.fret === f &&
+        i >= Math.min(disp(b.from), disp(b.to)) && i <= Math.max(disp(b.from), disp(b.to)));
+      if (inBarre) continue;
+      const cy = y0 + dy * (row - 0.5);
+      p += '<circle cx="' + x + '" cy="' + cy + '" r="4.6" fill="var(--chord)"/>';
+      const fg = fingers[disp(i)];
+      if (fg) p += '<text x="' + x + '" y="' + (cy + 3) + '" font-size="8" text-anchor="middle" fill="var(--bg)" font-weight="700">' + fg + '</text>';
+    }
+    return p + '</svg>';
+  }
+
+  // ---------- popup ----------
+  const pop = document.getElementById("chordpop");
+  let popChord = null, popVariant = 0, popSticky = false, popTimer = null, popSpan = null;
+
+  /** Voicings for a chord, already transposed, minus any that can't be played
+   *  or drawn (a 5-fret window, and nothing past the end of the neck). */
+  function shapesFor(displayName) {
+    const all = (S.tab && S.tab.shapes) || {};
+    const origin = chordOrigin[displayName] || displayName;
+    const list = all[origin];
+    if (!Array.isArray(list) || !list.length) return null;
+
+    const out = list.map((sh) => normalizeShape(sh, S.semitones)).filter((sh) => {
+      const f = sh.frets.filter((x) => x > 0);
+      if (!f.length) return true;                                   // all open strings
+      const lo = Math.min.apply(null, f), hi = Math.max.apply(null, f);
+      return hi <= 22 && hi - lo <= 4;
+    });
+    return out.length ? out : null;
+  }
+
+  function drawPop() {
+    const list = shapesFor(popChord);
+    if (!list) return hidePop();
+    popVariant = ((popVariant % list.length) + list.length) % list.length;
+    const sh = list[popVariant];
+
+    let html = '<div class="cname">' + esc(popChord) + "</div>" + chordSVG(sh);
+    if (list.length > 1) {
+      html += '<div class="cnav">' +
+        (popSticky ? '<button data-nav="-1">\u2039</button>' : "") +
+        "<span>" + (popVariant + 1) + " / " + list.length + "</span>" +
+        (popSticky ? '<button data-nav="1">\u203a</button>' : "") +
+        "</div>";
+      if (!popSticky) html += '<div class="hint">click to browse</div>';
+    }
+    pop.innerHTML = html;
+    pop.classList.add("show");
+    position();
+  }
+
+  function position() {
+    if (!popSpan) return;
+    const r = popSpan.getBoundingClientRect();
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let x = r.left + r.width / 2 - pw / 2;
+    let y = r.bottom + 6;
+    if (y + ph > window.innerHeight - 4) y = r.top - ph - 6;   // flip above
+    x = Math.max(4, Math.min(x, window.innerWidth - pw - 4));
+    y = Math.max(4, y);
+    pop.style.left = x + "px";
+    pop.style.top = y + "px";
+  }
+
+  function showPop(span, sticky) {
+    if (popSpan && popSpan !== span) popSpan.classList.remove("lit");
+    popSpan = span;
+    popChord = span.textContent.trim();
+    if (!shapesFor(popChord)) return hidePop();
+    if (!sticky && popSticky) return;         // don't yank a pinned diagram away
+    if (sticky) popSticky = true;
+    span.classList.add("lit");
+    drawPop();
+  }
+
+  function hidePop() {
+    pop.classList.remove("show");
+    popSticky = false;
+    if (popSpan) popSpan.classList.remove("lit");
+    popSpan = null;
+  }
+
+  el.sheet.addEventListener("mouseover", (e) => {
+    const t = e.target.closest(".ch");
+    if (!t) return;
+    clearTimeout(popTimer);
+    popTimer = setTimeout(() => showPop(t, false), 110);
+  });
+
+  el.sheet.addEventListener("mouseout", (e) => {
+    if (!e.target.closest(".ch")) return;
+    clearTimeout(popTimer);
+    if (!popSticky) popTimer = setTimeout(hidePop, 180);
+  });
+
+  el.sheet.addEventListener("click", (e) => {
+    const t = e.target.closest(".ch");
+    if (!t) return;
+    e.preventDefault();
+    clearTimeout(popTimer);
+    if (popSticky && popSpan === t) { popVariant++; drawPop(); }
+    else { popVariant = 0; popSticky = false; showPop(t, true); }
+  });
+
+  pop.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-nav]");
+    if (!b) return;
+    // Redrawing detaches this button, so stop the event here -- otherwise it
+    // bubbles to the close-on-outside-click handler below, which can no longer
+    // tell the (now parentless) button came from inside the popup.
+    e.stopPropagation();
+    popVariant += parseInt(b.getAttribute("data-nav"), 10);
+    drawPop();
+  });
+  pop.addEventListener("mouseenter", () => clearTimeout(popTimer));
+  pop.addEventListener("mouseleave", () => { if (!popSticky) popTimer = setTimeout(hidePop, 180); });
+
+  el.scroll.addEventListener("scroll", () => { if (popSticky) position(); else hidePop(); }, { passive: true });
+  document.addEventListener("click", (e) => {
+    // A redraw can detach the clicked node; closest() would then walk an empty
+    // tree and read as an outside click.
+    if (!e.target.isConnected) return;
+    if (!e.target.closest(".ch") && !e.target.closest("#chordpop")) hidePop();
+  });
+
+  // ---------- window dragging ----------
+  // WebKit swallows mouse events, so the app floats a native drag strip over the
+  // bar. Tell it exactly where the dead space is: right of the traffic lights,
+  // left of the buttons.
+  /** Fade whichever edge still hides buttons; none once you're scrolled to an end. */
+  function updateToolsFade() {
+    const t = el.tools;
+    if (!t) return;
+    t.classList.toggle("more-left", t.scrollLeft > 1);
+    t.classList.toggle("more-right", t.scrollLeft + t.clientWidth < t.scrollWidth - 1);
+  }
+
+  let dragPending = false;
+  function reportDragRects() {
+    updateToolsFade();
+    if (dragPending) return;
+    dragPending = true;
+    requestAnimationFrame(() => {
+      dragPending = false;
+      const bar = el.bar.getBoundingClientRect();
+      const toolrow = el.toolrow.getBoundingClientRect();
+      const tools = el.tools.getBoundingClientRect();
+      if (!toolrow.width || !tools.width) return;   // layout unsettled; keep what we sent
+
+      // Grab anywhere on the bar except the buttons and the traffic lights.
+      const rects = [];
+
+      // Button row: from the very top of the window to the row's bottom, in the
+      // gap between the traffic lights and the first button.
+      const left = 70, right = Math.max(left, tools.left - 6);
+      if (right - left >= 24) {
+        rects.push({ x: left, y: 0, w: right - left, h: toolrow.bottom });
+      }
+
+      // Everything below the buttons, full width: the song line and the bar's
+      // padding. Stop short of the search field when it's showing.
+      const searchOpen = el.searchwrap.classList.contains("open");
+      const bandTop = toolrow.bottom;
+      const bandBottom = searchOpen
+        ? el.searchwrap.getBoundingClientRect().top - 2
+        : bar.bottom;
+      if (bandBottom - bandTop >= 8) {
+        rects.push({ x: 0, y: bandTop, w: window.innerWidth, h: bandBottom - bandTop });
+      }
+
+      // Sending nothing would leave the window undraggable; keep the last set.
+      if (!rects.length) return;
+      send({ action: "dragRects", rects: rects });
+    });
+  }
+
+  let reflowPending = false;
+  // Re-measure the moment the pointer reaches the bar, so a drag never starts
+  // against a stale rectangle.
+  el.bar.addEventListener("mouseenter", reportDragRects);
+  el.tools.addEventListener("scroll", () => { updateToolsFade(); reportDragRects(); }, { passive: true });
+
+  window.addEventListener("resize", () => {
+    reportDragRects();
+    if (S.wrap && S.tab && !reflowPending) {
+      reflowPending = true;
+      requestAnimationFrame(() => { reflowPending = false; renderSheet(); });
+    }
+  });
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(reportDragRects);
+    ro.observe(el.bar);
+    ro.observe(el.tools);
+    ro.observe(el.now);
+  }
+  reportDragRects();
+
+  send({ action: "ready" });
+})();
+</script>
+</body>
+</html>
