@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GuitarHUD</title>
+<title>GuitarCHUD</title>
 <style>
   :root {
     color-scheme: dark light;
@@ -232,7 +232,7 @@
     </div>
   </div>
   <div id="now">
-    <span id="song">GuitarHUD</span><span id="artist">waiting for Spotify…</span>
+    <span id="song">GuitarCHUD</span><span id="artist">waiting for Spotify…</span>
   </div>
   <div id="searchwrap"><input id="search" placeholder="Search Ultimate Guitar — song and artist, then ↵" spellcheck="false"></div>
   <div id="progress"></div>
@@ -637,9 +637,9 @@
     } else if (st === "notRunning") {
       show("<h2>Spotify isn’t running</h2><p>Start Spotify and play something — this window follows along on its own.</p>");
     } else if (st === "notAuthorized") {
-      show("<h2>One-time permission needed</h2><p>macOS needs your OK for GuitarHUD to read what Spotify is playing.</p>" +
+      show("<h2>One-time permission needed</h2><p>macOS needs your OK for GuitarCHUD to read what Spotify is playing.</p>" +
            '<button class="btn" id="fixperm">Open Privacy Settings</button>' +
-           '<p style="margin-top:10px">Enable <b>Spotify</b> under GuitarHUD, then reopen the app.</p>');
+           '<p style="margin-top:10px">Enable <b>Spotify</b> under GuitarCHUD, then reopen the app.</p>');
       const b = $("fixperm");
       if (b) b.onclick = () => send({ action: "openAutomationSettings" });
     } else if (st === "noResults") {
@@ -664,10 +664,10 @@
 
   function renderNow() {
     const t = S.track || {};
-    el.song.textContent = t.name || "GuitarHUD";
+    el.song.textContent = t.name || "GuitarCHUD";
     el.artist.textContent = t.artist ? "— " + t.artist
                                      : (t.name ? "" : "waiting for Spotify…");
-    document.title = t.name ? t.name + " — " + t.artist : "GuitarHUD";
+    document.title = t.name ? t.name + " — " + t.artist : "GuitarCHUD";
   }
 
   // ---------- bridge in ----------

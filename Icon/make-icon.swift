@@ -1,8 +1,8 @@
-// Draws GuitarHUD's app icon and writes Resources/GuitarHUD.icns.
+// Draws GuitarCHUD's app icon and writes Resources/GuitarCHUD.icns.
 // Run via Icon/make-icon.sh. Nothing else depends on it at build time.
 import AppKit
 
-let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "./GuitarHUD.iconset"
+let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "./GuitarCHUD.iconset"
 
 func hex(_ v: UInt32, _ a: CGFloat = 1) -> CGColor {
     CGColor(red: CGFloat((v >> 16) & 0xff) / 255,

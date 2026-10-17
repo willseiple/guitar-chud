@@ -1,4 +1,4 @@
-# GuitarHUD
+# GuitarCHUD
 
 A floating chord window for macOS. It watches what Spotify is playing, pulls the
 matching chords from Ultimate Guitar, and keeps them in front of your other
@@ -15,15 +15,15 @@ menu-bar item when the window is closed.
 ## Build & install
 
 ```bash
-./build.sh                 # builds ./GuitarHUD.app for this Mac
+./build.sh                 # builds ./GuitarCHUD.app for this Mac
 ./build.sh /Applications   # builds straight into /Applications
-./build.sh --share         # universal build + dist/GuitarHUD.zip to send someone
+./build.sh --share         # universal build + dist/GuitarCHUD.zip to send someone
 ```
 
 `--share` builds both arm64 and x86_64 slices, since an Apple Silicon–only build
-won't launch on an Intel Mac, and produces two things: `GuitarHUD.zip` (archived
+won't launch on an Intel Mac, and produces two things: `GuitarCHUD.zip` (archived
 with `ditto`, so the bundle and signature survive the round trip) and
-`GuitarHUD.dmg`, which opens to the familiar drag-onto-Applications window.
+`GuitarCHUD.dmg`, which opens to the familiar drag-onto-Applications window.
 
 The recipient needs macOS 13 or later and the Spotify **desktop** app — the web
 player and the phone app can't be read over Apple Events. Any Spotify account
@@ -35,12 +35,12 @@ than notarized, so Gatekeeper refuses it — usually with a misleading "app is
 damaged" message. The recipient clears it with:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/GuitarHUD.app
+xattr -dr com.apple.quarantine /Applications/GuitarCHUD.app
 ```
 
 Notarizing it (a paid Apple Developer account) is the only way to skip that step.
 
-First launch, macOS asks for permission to read Spotify ("GuitarHUD wants to
+First launch, macOS asks for permission to read Spotify ("GuitarCHUD wants to
 control Spotify"). Say yes — that Apple Event is the only way to see the current
 track without an API key or login. If you miss the prompt, the window shows a
 button that opens the right Privacy pane.
@@ -142,7 +142,7 @@ spaces that follow each chord, so the monospace grid doesn't drift.
 
 ## The icon
 
-`Resources/GuitarHUD.icns` is drawn in code, not painted by hand — a chord
+`Resources/GuitarCHUD.icns` is drawn in code, not painted by hand — a chord
 diagram in the same amber the app uses for chord names. Regenerate it with
 `Icon/make-icon.sh` after editing `Icon/make-icon.swift`; it renders all ten
 sizes macOS wants and runs them through `iconutil`.

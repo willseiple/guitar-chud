@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
 
-        w.title = "GuitarHUD"
+        w.title = "GuitarCHUD"
         w.titleVisibility = .hidden
         w.titlebarAppearsTransparent = true
         w.isMovableByWindowBackground = true
@@ -133,7 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
             return nil   // consumed: don't also deliver it to the page
         }
 
-        NSLog("GuitarHUD window visible=%d frame=%@ screens=%d",
+        NSLog("GuitarCHUD window visible=%d frame=%@ screens=%d",
               w.isVisible ? 1 : 0, NSStringFromRect(w.frame), NSScreen.screens.count)
     }
 
@@ -250,7 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         }
 
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit GuitarHUD", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit GuitarCHUD", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
 
         statusItem.menu = menu
@@ -286,9 +286,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Hide GuitarHUD", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Hide GuitarCHUD", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit GuitarHUD", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit GuitarCHUD", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
 
@@ -329,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         case .notAuthorized:
             if statusKind != "notAuthorized" {
                 statusKind = "notAuthorized"
-                statusMessage = "GuitarHUD needs permission to read Spotify."
+                statusMessage = "GuitarCHUD needs permission to read Spotify."
                 attemptedTrackID = nil
                 push(newSong: false); rebuildStatusMenu()
             }
